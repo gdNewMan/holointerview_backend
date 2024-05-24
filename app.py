@@ -1,45 +1,50 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for
-from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
-CORS(app)
+sendingData = ["안녕하세요 면접에 오신 걸 환영합니다",
+               "대학생활 중 어떤 일에 몰두했습니까?",
+               "WAS(Web Application Server)와 WS(Web Server)의 차이를 설명해주세요.",
+               "Spring Framework에 대해 설명해주세요.",
+               "@RequestBody, @RequestParam, @ModelAttribute의 차이를 설명해주세요."
+               ]
 
-# 외부 MySQL 데이터베이스 설정
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://test_user:test_user@119.67.85.26/PROJECT'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+questionCount = 0
 
-db = SQLAlchemy(app)
-# User 테이블과 매핑되는 데이터베이스 모델 정의
-class User(db.Model):
-    __tablename__ = 'User'  # 기존 User 테이블 이름
-    userId = db.Column(db.String(12), primary_key=True)
-    passwd = db.Column(db.String(128), nullable=False)
-    userName = db.Column(db.String(128), nullable=False)
+@app.route('/api/users',methods = ['POST'])
+def set_user():
+    global questionCount
+    questionCount=0
+    data = {
+        "message":"hi"
+    }
+    return jsonify(data)
 
-@app.route('/')
-def home():
-    return "Hello, Flask with MySQL!"
+@app.route('/api/data', methods=['GET'])
+def get_data():
+    global questionCount
+    if questionCount < len(sendingData):
+        data = {
+            "message": sendingData[questionCount]
+        }
+    elif questionCount==len(sendingData):
+        data = {
+            "message": "수고하셨습니다"
+        }
+    else:
+        data = {
+            "message": ""
+        }
+    questionCount = questionCount+1
+    return jsonify(data)
 
-
-# 사용자 추가 엔드포인트
-@app.route('/api/users', methods=['POST'])
-def add_user():
-    try:
-        data = request.json
-        app.logger.info(f'Received data: {data}')
-        new_user = User(
-            userId=data.get('userId'),
-            passwd=data.get('passwd'),
-            userName=data.get('userName')
-        )
-        db.session.add(new_user)
-        db.session.commit()
-        return jsonify({'message': 'User added successfully'})
-    except Exception as e:
-        app.logger.error(f'Error: {e}')
-        return jsonify({'message': 'Failed to add user', 'error': str(e)}), 500
-
+@app.route('/api/data', methods=['POST'])
+def post_data():
+    received_data = request.get_json()
+    response = {
+        "receivedMessage": received_data,
+    }
+    #send Data to GPT and server
+    return jsonify(response)
 
 if __name__ == '__main__':
     app.run(debug=True)
