@@ -1,6 +1,14 @@
 from flask import Flask, request, jsonify
+from dotenv import load_dotenv
+from openai import OpenAI
+import os
 
+load_dotenv()
+client = OpenAI(
+    api_key=os.environ.get("OPEN_API_KEY"),
+    )
 app = Flask(__name__)
+
 sendingData = ["안녕하세요 면접에 오신 걸 환영합니다",
                "대학생활 중 어떤 일에 몰두했습니까?",
                "WAS(Web Application Server)와 WS(Web Server)의 차이를 설명해주세요.",
@@ -20,30 +28,31 @@ bestAnswer = ["네 안녕하세요", "저는 개발밖에 모릅니다",
               "\n@RequestParam은 1개의 HTTP 요청 파라미터를 받기 위해 사용합니다."]
 
 questionCount = 0
-
+_questionLimit = 7
 
 # DataBase Section
 @app.route('/api/database', methods=['GET'])
 def get_feedback_data():
     global questionCount
-    if questionCount > len(sendingData): questionCount = 0
+    if questionCount > len(sendingData):
+        questionCount = 0
     print(recievedData)
     print(questionCount)
-    if questionCount<len(sendingData):
+    if questionCount < len(sendingData):
         # Get question
         question = sendingData[questionCount]
         # Get user answer
-        answerUser = recievedData[questionCount]
+        answerUser = recievedData[questionCount+1]
         # Get GPT answer
         answerGPT = bestAnswer[questionCount]
         data = {
-            "question": question,
+            "answerGPT": answerGPT,
             "answerUser": answerUser,
-            "answerGPT": answerGPT
+            "question": question,
         }
     else:
         data = {}
-    questionCount=questionCount+1
+    questionCount = questionCount+1
     return jsonify(data)
 
 
@@ -78,23 +87,36 @@ def get_data():
         data = {
             "message": ""
         }
-
-
     return jsonify(data)
 
 
 @app.route('/api/gpt', methods=['POST'])
-def post_data():
+def chat():
     global recievedData
-    if len(recievedData)==7:recievedData.clear()#추후 데이터를 받아올때 7을 어떻게 바꿀지
-    recieved_data = request.get_json()
-    print(recieved_data['sendingData'])
-    recievedData.append(recieved_data['sendingData'])
-    print(recievedData)
-    # send Data to GPT and server
-    return jsonify(recieved_data)
+
+    if len(recievedData) == _questionLimit:  #추후 데이터를 받아올때 7을 어떻게 바꿀지
+        recievedData.clear()
+
+    recieved_texts = request.get_json()['message']
+    recievedData.append(recieved_texts)
+    print(recieved_texts)
+    try:
+        response = client.chat.completions.create(
+            model = 'gpt-3.5-turbo-0125',
+            messages=[
+                 {"role": "system", "content": "너는 면접관이야"},
+                 {"role": "user", "content": "hi"}
+            ]
+        )
+        gpt_message = response['choices'][0]['message']['content']
+        # send Data to GPT and server
+        return jsonify({'message': gpt_message})
+    except Exception as e:
+        print('error')
+        print(f'error : {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
 
 
 if __name__ == '__main__':
     app.run(debug=True)
-
