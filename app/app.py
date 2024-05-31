@@ -1,18 +1,23 @@
 from flask import Flask, request, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
+from flask_session import Session
 from models import db, User, Education, JobExperience, ProjectExp
 import os
 
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, supports_credentials=True)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://test_user:test_user@119.67.85.26/PROJECT'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.urandom(24)
+app.config['SESSION_TYPE'] = 'sqlalchemy'  # 또는 'redis', 'memcached' 등
+app.config['SESSION_SQLALCHEMY'] = db
+
 
 db.init_app(app)
+Session(app)  # Flask-Session 초기화
 
 model_name = 'ft:gpt-3.5-turbo-0125:personal::9SqEUNiZ'
 api_key = os.getenv('OPENAI_API_KEY')
@@ -56,12 +61,16 @@ def login():
         return jsonify({"message": "Invalid credentials"}), 401
 
     session['user_id'] = user_id
+    app.logger.info(f'Session set for user_id: {user_id}')
     return jsonify({"message": "Login successful", "userID": user_id}), 200
 
 @app.route('/api/submit_info', methods=['POST'])
 def submit_info():
     data = request.json
     user_id = session.get('user_id')
+
+    app.logger.info(f'Session user_id: {user_id}')
+    app.logger.info(f'Received data: {data}')
 
     if not user_id:
         return jsonify({"message": "Unauthorized"}), 401
@@ -95,9 +104,10 @@ def submit_info():
 
     db.session.commit()
 
+    app.logger.info(db.session)
+
     return jsonify({"message": "Information submitted successfully"}), 200
 
-questionCount = 0
 
 @app.route('/api/users',methods = ['POST'])
 def set_user():
