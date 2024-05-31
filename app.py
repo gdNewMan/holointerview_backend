@@ -17,16 +17,6 @@ db.init_app(app)
 model_name = 'ft:gpt-3.5-turbo-0125:personal::9SqEUNiZ'
 api_key = os.getenv('OPENAI_API_KEY')
 
-
-
-app = Flask(__name__)
-
-sendingData = ["안녕하세요 면접에 오신 걸 환영합니다",
-               "대학생활 중 어떤 일에 몰두했습니까?",
-               "WAS(Web Application Server)와 WS(Web Server)의 차이를 설명해주세요.",
-               "Spring Framework에 대해 설명해주세요.",
-               "@RequestBody, @RequestParam, @ModelAttribute의 차이를 설명해주세요."
-               ]
 user_info = {}
 
 questionCount = 0
