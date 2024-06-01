@@ -1,6 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
+from app.extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
-db = SQLAlchemy()
 
 class User(db.Model):
     __tablename__ = 'User'
@@ -18,7 +18,7 @@ class ProjectExp(db.Model):
     __tablename__ = 'ProjectExp'
     expId = db.Column(db.Integer, primary_key=True)
     devLanguage = db.Column(db.String(50))
-    framework = db.Column(db.String(50))
+    tech = db.Column(db.String(50))
     detail = db.Column(db.Text)
     userId = db.Column(db.String(12), db.ForeignKey('User.userId'))
 
@@ -27,20 +27,17 @@ class JobExperience(db.Model):
     jobExperienceId = db.Column(db.Integer, primary_key=True)
     userId = db.Column(db.String(12), db.ForeignKey('User.userId'))
     companyName = db.Column(db.String(256))
-    role = db.Column(db.String(128))
-    jobDescription = db.Column(db.Text)
-    startDate = db.Column(db.Date)
-    endDate = db.Column(db.Date)
+    position = db.Column(db.String(128))
+    jobDetail = db.Column(db.Text)
+    years_of_service = db.Column(db.String(128))
 
 class Education(db.Model):
     __tablename__ = 'Education'
     educationId = db.Column(db.Integer, primary_key=True)
     userId = db.Column(db.String(12), db.ForeignKey('User.userId'))
     schoolName = db.Column(db.String(256))
-    degree = db.Column(db.String(128))
-    fieldOfStudy = db.Column(db.String(256))
-    startDate = db.Column(db.Date)
-    endDate = db.Column(db.Date)
+    major = db.Column(db.String(128))
+
 
 class Interview(db.Model):
     __tablename__ = 'Interview'
@@ -54,6 +51,8 @@ class InterviewSet(db.Model):
     interviewSetId = db.Column(db.Integer, primary_key=True)
     userId = db.Column(db.String(12), db.ForeignKey('User.userId'))
     expId = db.Column(db.Integer, db.ForeignKey('ProjectExp.expId'))
+    jobExperienceId = db.Column(db.Integer, db.ForeignKey('JobExperience.jobExperienceId'))
+    educationId = db.Column(db.Integer, db.ForeignKey('Education.educationId'))
     industry = db.Column(db.String(128))
     department = db.Column(db.String(128))
     role = db.Column(db.String(128))
