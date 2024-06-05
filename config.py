@@ -4,6 +4,8 @@ class Config:
     SECRET_KEY = os.urandom(24)
     SQLALCHEMY_DATABASE_URI = 'mysql://test_user:test_user@119.67.85.26/PROJECT'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SESSION_COOKIE_HTTPONLY = True,
+    SESSION_COOKIE_SECURE = False,  # 개발 환경에서는 False로 설정, 배포 환경에서는 True로 설정
+    SESSION_TYPE = 'filesystem'
+     # 필요에 따라 filesystem 또는 다른 저장소 설정
 
-    model_name = 'ft:gpt-3.5-turbo-0125:personal::9SqEUNiZ'
-    api_key = os.getenv('OPENAI_API_KEY')

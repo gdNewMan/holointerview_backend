@@ -37,6 +37,5 @@ def login():
     if user is None or not user.check_password(password):
         return jsonify({"message": "Invalid credentials"}), 401
 
-    session['user_id'] = user_id
-    app.logger.info(f'Session set for user_id: {user_id}')
-    return jsonify({"message": "Login successful", "userID": user_id}), 200
+    app.logger.info(f'Session set for user_id: {session.get("user_id")}')
+    return jsonify({"message": "Login successful", "userId": user_id}), 200
