@@ -1,14 +1,26 @@
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from openai import OpenAI
+from flask_cors import CORS
+from models import db, User, Education, JobExperience, ProjectExp
 import os
 
 load_dotenv()
 client = OpenAI(
     api_key=os.environ.get("OPEN_API_KEY"),
     )
-app = Flask(__name__)
 
+app = Flask(__name__)
+# CORS(app)
+
+# app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://test_user:test_user@119.67.85.26/PROJECT'
+# app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# app.config['SECRET_KEY'] = os.urandom(24)
+
+# db.init_app(app)
+
+#Example Data
+#================================================================================================
 sendingData = ["안녕하세요 면접에 오신 걸 환영합니다",
                "대학생활 중 어떤 일에 몰두했습니까?",
                "WAS(Web Application Server)와 WS(Web Server)의 차이를 설명해주세요.",
@@ -26,7 +38,12 @@ bestAnswer = ["네 안녕하세요", "저는 개발밖에 모릅니다",
               "스프링 프레임 워크는 자바 개발을 편리하게 해주는 오픈소스 프레임워크 입니다.",
               "@RequestBody는 클라이언트가 전송하는 JSON 형태의 HTTP Body 내용을 MessageConverter를 통해 Java Object로 변환시켜주는 역할을 합니다."
               "\n@RequestParam은 1개의 HTTP 요청 파라미터를 받기 위해 사용합니다."]
+#================================================================================================
 
+#History Message to send to GPT
+history_messages=[
+                 {"role": "system", "content": "너는 면접관이야 면접질문만 하면 돼 질문은 한번에 하나씩만 해줘"},
+                ]
 questionCount = 0
 _questionLimit = 7
 
@@ -61,10 +78,11 @@ def get_feedback_data():
 def set_user():
     global questionCount
     questionCount = 0
+    #get data from database
     # Send BaseData to GPT
     # data will be the first question
     data = {
-        "message": "hi"
+        "message": "안녕하세요 면접에 오신 걸 환영합니다"
     }
     return jsonify(data)
 
@@ -92,24 +110,28 @@ def get_data():
 
 @app.route('/api/gpt', methods=['POST'])
 def chat():
+    """
+    Chat with GPT
+    and save the conversation to the history_messages
+    return: GPT's answer
+    """
     global recievedData
-
-    if len(recievedData) == _questionLimit:  #추후 데이터를 받아올때 7을 어떻게 바꿀지
-        recievedData.clear()
-
+    global history_messages
     recieved_texts = request.get_json()['message']
-    recievedData.append(recieved_texts)
+    recievedData.append(recieved_texts)#Save to DataBase
     print(recieved_texts)
     try:
+        print(history_messages)
         response = client.chat.completions.create(
+            presence_penalty=0.8,
+            temperature=0.6,
             model = 'gpt-3.5-turbo-0125',
-            messages=[
-                 {"role": "system", "content": "너는 면접관이야"},
-                 {"role": "user", "content": "hi"}
-            ]
+            messages=history_messages
         )
-        gpt_message = response['choices'][0]['message']['content']
-        # send Data to GPT and server
+        gpt_message = response.choices[0].message.content
+        history_messages.append({"role": "user", "content": recieved_texts})
+        history_messages.append({"role": "assistant", "content": gpt_message})
+        
         return jsonify({'message': gpt_message})
     except Exception as e:
         print('error')
