@@ -42,10 +42,10 @@ bestAnswer = ["네 안녕하세요", "저는 개발밖에 모릅니다",
 
 #History Message to send to GPT
 history_messages=[
-                 {"role": "system", "content": "너는 면접관이야 면접질문만 하면 돼 질문은 한번에 하나씩만 해줘"},
+                 {"role": "system", "content": "너는 면접관이야 면접질문만 하면 돼 질문은 한번에 하나씩만 해줘 질문을 할때는 순서를 앞에 붙여줘"},
                 ]
-questionCount = 0
-_questionLimit = 7
+questionCount = 1
+_questionLimit = 4
 
 # DataBase Section
 @app.route('/api/database', methods=['GET'])
@@ -78,34 +78,40 @@ def get_feedback_data():
 def set_user():
     global questionCount
     questionCount = 0
+    
     #get data from database
     # Send BaseData to GPT
     # data will be the first question
     data = {
         "message": "안녕하세요 면접에 오신 걸 환영합니다"
     }
+    history_messages.append({"role": "assistant", "content": data['message']})
     return jsonify(data)
 
 
-@app.route('/api/gpt', methods=['GET'])
-def get_data():
-    global questionCount
-    if questionCount < len(sendingData):
-        data = {
-            "message": sendingData[questionCount]  # get GPT's answer
-        }
-        questionCount = questionCount + 1
-    elif questionCount == len(sendingData):
-        data = {
-            "message": "수고하셨습니다"
-        }
-        questionCount = questionCount + 1
-    else:
-        questionCount = 0
-        data = {
-            "message": ""
-        }
-    return jsonify(data)
+# @app.route('/api/gpt', methods=['GET'])
+# def get_data():
+#     global questionCount
+#     if questionCount < _questionLimit:
+#         app.logger.info(f'chatted questionCount: {questionCount}')
+#         data = {
+#             "message": sendingData[questionCount]  # get GPT's answer
+#         }
+#         questionCount = questionCount + 1
+#     elif questionCount == _questionLimit:
+#         app.logger.info(f'ending questionCount: {questionCount}')
+#         data = {
+#             "message": "수고하셨습니다"
+#         }
+#         questionCount = questionCount + 1
+#     else:
+#         app.logger.info(f'empty questionCount: {questionCount}')
+#         questionCount = 0
+#         data = {
+#             "message": ""
+#         }
+#         app.logger.info(f'before return questionCount: {questionCount}')
+#     return jsonify(data)
 
 
 @app.route('/api/gpt', methods=['POST'])
@@ -115,24 +121,37 @@ def chat():
     and save the conversation to the history_messages
     return: GPT's answer
     """
-    global recievedData
+    # global recievedData
+    global questionCount
     global history_messages
     recieved_texts = request.get_json()['message']
-    recievedData.append(recieved_texts)#Save to DataBase
-    print(recieved_texts)
+    # recievedData.append(recieved_texts)#Save to DataBase
     try:
-        print(history_messages)
+        #Save user's message to history_messages to gpt remmeber conversation
+        history_messages.append({"role": "user", "content": recieved_texts})
+        #Send to GPT
         response = client.chat.completions.create(
             presence_penalty=0.8,
             temperature=0.6,
             model = 'gpt-3.5-turbo-0125',
             messages=history_messages
         )
+        #Get GPT's answer
         gpt_message = response.choices[0].message.content
-        history_messages.append({"role": "user", "content": recieved_texts})
+        #Save GPT's message to history_messages
         history_messages.append({"role": "assistant", "content": gpt_message})
-        
-        return jsonify({'message': gpt_message})
+        #추후 데이터베이스에 저장
+        if questionCount < _questionLimit:
+            data = {
+                "message": gpt_message  # get GPT's answer
+            }
+            questionCount = questionCount + 1
+        elif questionCount == _questionLimit:
+            data = {
+                "message": "수고하셨습니다"
+            }
+            questionCount = 0
+        return jsonify(data)#return to flutter
     except Exception as e:
         print('error')
         print(f'error : {str(e)}')
