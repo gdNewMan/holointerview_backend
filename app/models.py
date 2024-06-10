@@ -53,10 +53,10 @@ class InterviewSet(db.Model):
     expId = db.Column(db.Integer, db.ForeignKey('ProjectExp.expId'))
     jobExperienceId = db.Column(db.Integer, db.ForeignKey('JobExperience.jobExperienceId'))
     educationId = db.Column(db.Integer, db.ForeignKey('Education.educationId'))
+    company = db.Column(db.String(128))
     industry = db.Column(db.String(128))
     department = db.Column(db.String(128))
     role = db.Column(db.String(128))
-    workYear = db.Column(db.Integer)
 
 class InterviewQA(db.Model):
     __tablename__ = 'InterviewQA'

@@ -2,7 +2,7 @@ import os
 
 class Config:
     SECRET_KEY = os.urandom(24)
-    SQLALCHEMY_DATABASE_URI = 'mysql://test_user:test_user@119.67.85.26/PROJECT'
+    SQLALCHEMY_DATABASE_URI = 'mysql://root:whehdgus0!@localhost/holo'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SESSION_COOKIE_HTTPONLY = True,
     SESSION_COOKIE_SECURE = False,  # 개발 환경에서는 False로 설정, 배포 환경에서는 True로 설정
