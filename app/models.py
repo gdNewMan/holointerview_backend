@@ -1,7 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from app.extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
-
+from datetime import datetime
 class User(db.Model):
     __tablename__ = 'User'
     userId = db.Column(db.String(12), primary_key=True)
@@ -58,11 +58,16 @@ class InterviewSet(db.Model):
     department = db.Column(db.String(128))
     role = db.Column(db.String(128))
 
+
 class InterviewQA(db.Model):
     __tablename__ = 'InterviewQA'
     InterviewQAId = db.Column(db.Integer, primary_key=True)
     interviewId = db.Column(db.Integer, db.ForeignKey('Interview.interviewId'))
-    sequence = db.Column(db.Integer, unique=True)
+    sequence = db.Column(db.Integer)
+
+    __table_args__ = (
+        db.UniqueConstraint('interviewId', 'sequence', name='unique_interview_sequence'),
+    )
 
 class Questions(db.Model):
     __tablename__ = 'Questions'
@@ -77,3 +82,10 @@ class Answer(db.Model):
     interviewQAId = db.Column(db.Integer, db.ForeignKey('InterviewQA.InterviewQAId'))
     answer = db.Column(db.Text)
     answerTime = db.Column(db.DateTime)
+
+class Feedback(db.Model):
+    __tablename__ = 'Feedback'
+    feedbackId = db.Column(db.Integer, primary_key=True)
+    interviewId = db.Column(db.Integer, db.ForeignKey('Interview.interviewId'))
+    comment = db.Column(db.Text, nullable=False)
+    createdAt = db.Column(db.DateTime, default=datetime.utcnow)

@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify, current_app as app
-from ..models import db, Education, JobExperience, ProjectExp, User, InterviewSet, Interview, InterviewQA, Questions, Answer
+from ..models import db, Education, JobExperience, ProjectExp, User, InterviewSet, Interview, InterviewQA, Questions, Answer, Feedback
 from dotenv import load_dotenv
 from openai import OpenAI
+from datetime import datetime
 import os
 
 load_dotenv()
@@ -14,11 +15,65 @@ client = OpenAI(
 )
 
 user_info = {}
-
+interview_id = None
+_questionLimit = 13
 questionCount = 0
-_questionLimit = 10
+@main_bp.route('/api/get_interviews', methods=['GET'])
+def get_interviews():
+    user_id = request.args.get('userId')
 
-recievedData = []
+    if not user_id:
+        return jsonify({"message": "Unauthorized"}), 401
+    interview_sets = InterviewSet.query.filter_by(userId=user_id).all()
+    result = []
+
+    for interview_set in interview_sets:
+        interviews = Interview.query.filter_by(interviewSetId=interview_set.interviewSetId).all()
+        for interview in interviews:
+            result.append({
+                "interviewSetId": interview.interviewSetId,
+                "interviewId": interview.interviewId,
+                "company": interview_set.company,
+                "interviewStartTime": interview.interviewStartTime,
+                "interviewSequence": interview.interviewSequence
+            })
+        app.logger.info(f"피드백 정보 : {result}")
+    return jsonify(result), 200
+
+@main_bp.route('/api/get_interview_details', methods=['GET'])
+def get_interview_details():
+    interview_id = request.args.get('interviewId')
+
+    if not interview_id:
+        return jsonify({"message": "Interview ID is required"}), 400
+
+    interview_details = (
+        db.session.query(InterviewQA, Questions, Answer)
+        .join(Questions, InterviewQA.InterviewQAId == Questions.interviewQAId)
+        .join(Answer, InterviewQA.InterviewQAId == Answer.interviewQAId)
+        .filter(InterviewQA.interviewId == interview_id)
+        .all()
+    )
+
+    feedback = Feedback.query.filter_by(interviewId=interview_id).first()
+
+    if not interview_details and not feedback:
+        return jsonify({"message": "No interview details found for the provided ID"}), 404
+
+    result = []
+    for qa, question, answer in interview_details:
+        result.append({
+            "question": question.question,
+            "answer": answer.answer,
+            "questionTime": question.questionTime,
+            "answerTime": answer.answerTime
+        })
+
+    feedback_comment = feedback.comment if feedback else "No feedback available"
+
+    return jsonify({"details": result, "feedback": feedback_comment}), 200
+
+
 
 @main_bp.route('/api/get_interview_sets', methods=['GET'])
 def get_interview_sets():
@@ -98,7 +153,7 @@ def set_user():
     user_id = data.get('userId')
     interview_set_id = data.get('interviewSetId')
 
-    app.logger.info(f'Received user_id: {user_id}')
+    app.logger.info(f'Received interviewSetId: {interview_set_id}')
 
     if not user_id:
         return jsonify({"message": "Unauthorized"}), 401
@@ -117,7 +172,7 @@ def set_user():
         return jsonify({"message": "InterviewSet not found"}), 404
 
     global history_messages
-    global questionCount
+    global interview_id
 
     user_info = {
         "면접자 이름": user.userName,
@@ -163,7 +218,7 @@ def set_user():
 
         [파트2: 인성 관련 질문]
         인성 질문은 사용자의 특이한 학력이나 전공, 이력이 있으면 그것과 관련해서 어떻게 개발 쪽 업무에 관심을 가지게 되었는지와 관련해서 질문해.
-        질문수는 3개.
+        질문수는 3개를 넘지 않도록 해.
         유동적으로 사용자의 답변에 따라 추가로 궁금한 부분은 추가질문 1개까지 가능.
         -"비전공자인데 소프트웨어 개발에 관심을 갖게 된 계기에 대해서 말씀해주세요"
         -"대학교를 진학하지 않으셨는데 왜 대학교 진학을 하지 않았고, 어떻게 혼자 공부를 진행했나요?"
@@ -224,35 +279,68 @@ def set_user():
     }
     history_messages = [initial_system_message]
     history_messages.append({"role": "user",
-                             "content": f"첫번째 질문 시작!"})
+                             "content": f"첫번째 질문 시작! "})
 
     # 인터뷰 시작 시간과 시퀀스 번호 생성
     interview_sequence = Interview.query.filter_by(interviewSetId=interview_set_id).count() + 1
     interview = Interview(interviewSetId=interview_set_id, interviewStartTime=datetime.now(), interviewSequence=interview_sequence)
     db.session.add(interview)
-    db.session.flush()
+    db.session.commit()
 
+    interview_id = interview.interviewId
     response = client.chat.completions.create(
         presence_penalty=0.8,
         model=model_name,
         messages=history_messages
     )
     gpt_message = response.choices[0].message.content
-    questionCount += 1
-    return jsonify({"message": f"{user.userName}님 면접을 시작하겠습니다.\n"+gpt_message}), 200
+    history_messages.append({"role": "assistant", "content": gpt_message})
+    # 첫 질문 저장
+    interviewQA = InterviewQA(interviewId=interview_id, sequence=1)
+    db.session.add(interviewQA)
+    db.session.flush()
+
+    question = Questions(interviewQAId=interviewQA.InterviewQAId, question=gpt_message, questionTime=datetime.now())
+    db.session.add(question)
+
+    db.session.commit()
+    return jsonify({"message": f"{user.userName}님 면접을 시작하겠습니다.\n"+gpt_message,
+                    "interviewId": interview_id
+                    }), 200
 
 
 @main_bp.route('/api/gpt', methods=['POST'])
 def chat():
-    global recievedData
     global model_name
     global history_messages
     global questionCount
-
+    global interview_id
     try:
-        recieved_texts = request.get_json()['message']
+        recieved_text = request.get_json()['message']
+        app.logger.info(recieved_text)
+
+        interview_qa_sequence = InterviewQA.query.filter_by(interviewId=interview_id).count()
+        if interview_qa_sequence == 4:
+            recieved_texts = f"답변 내용 : {recieved_text}/////파트3 관련 질문 시작"
+        elif interview_qa_sequence == 8:
+            recieved_texts = f"답변 내용 : {recieved_text}/////파트4 관련 질문 시작"
+        elif interview_qa_sequence == _questionLimit:
+            data = { "message": "수고하셨습니다"}
+            return jsonify(data)
+        else :
+            recieved_texts = recieved_text
+
         history_messages.append({"role": "user", "content": recieved_texts})
-        app.logger.info(recieved_texts)
+
+        app.logger.info(history_messages)
+        # Save the answer for the previous question
+        if interview_qa_sequence > 0:
+            latest_interview_qa = InterviewQA.query.filter_by(interviewId=interview_id,
+                                                              sequence=interview_qa_sequence).first()
+            answer = Answer(interviewQAId=latest_interview_qa.InterviewQAId, answer=recieved_text,
+                            answerTime=datetime.now())
+            db.session.add(answer)
+
 
         response = client.chat.completions.create(
             presence_penalty=0.8,
@@ -261,37 +349,71 @@ def chat():
         )
         gpt_message = response.choices[0].message.content
         app.logger.info(gpt_message)
+        history_messages.append({"role": "assistant", "content": gpt_message})
 
-        # Save question and answer to database
-        interviewQA = InterviewQA(interviewId=interview_id, sequence=questionCount)
+        interview_qa_sequence += 1
+        interviewQA = InterviewQA(interviewId=interview_id, sequence=interview_qa_sequence)
         db.session.add(interviewQA)
         db.session.flush()
 
         question = Questions(interviewQAId=interviewQA.InterviewQAId, question=gpt_message, questionTime=datetime.now())
         db.session.add(question)
 
-        answer = Answer(interviewQAId=interviewQA.InterviewQAId, answer=recieved_texts, answerTime=datetime.now())
-        db.session.add(answer)
-
         db.session.commit()
-
-        history_messages.append({"role": "assistant", "content": gpt_message})
 
         data = {
             "message": gpt_message
         }
-
-        if questionCount < _questionLimit:
-            questionCount += 1
-        elif questionCount == _questionLimit:
-            data = {
-                "message": "수고하셨습니다"
-            }
-        else:
-            questionCount = 0
-
         return jsonify(data)
     except Exception as e:
         print('error')
         print(f'error : {str(e)}')
         return jsonify({'error': str(e)}), 500
+
+@main_bp.route('/api/end_interview', methods=['POST'])
+def end_interview():
+    data = request.json
+    interview_id = data.get('interviewId')
+
+    if not interview_id:
+        return jsonify({"message": "Invalid interview ID"}), 400
+
+    interview_qa_sequence = InterviewQA.query.filter_by(interviewId=interview_id).count()
+    if(interview_qa_sequence>=5):
+        app.logger.info("피드백 내용 생성중")
+        generate_feedback(interview_id)
+
+    return jsonify({"message": "Interview ended and feedback generated"}), 200
+
+def generate_feedback(interview_id):
+    # Retrieve interview details from the database
+    interview_details = db.session.query(InterviewQA, Questions, Answer).join(
+        Questions, InterviewQA.InterviewQAId == Questions.interviewQAId
+    ).join(
+        Answer, InterviewQA.InterviewQAId == Answer.interviewQAId
+    ).filter(
+        InterviewQA.interviewId == interview_id
+    ).all()
+
+    # Generate the conversation history for GPT-3
+    conversation_history = []
+    for detail in interview_details:
+        conversation_history.append({"role": "assistant", "content": detail[1].question})
+        conversation_history.append({"role": "user", "content": detail[2].answer})
+
+    # Generate feedback using GPT-3
+    response = client.chat.completions.create(
+        presence_penalty=0.8,
+        model=model_name,
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant that provides feedback on interview performance."},
+            *conversation_history,
+            {"role": "system", "content": "Provide feedback on the interview performance."}
+        ]
+    )
+    feedback_message = response.choices[0].message.content
+
+    # Save the feedback to the database
+    feedback = Feedback(interviewId=interview_id, comment=feedback_message)
+    db.session.add(feedback)
+    db.session.commit()
